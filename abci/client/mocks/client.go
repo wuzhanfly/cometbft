@@ -614,6 +614,7 @@ func (_m *Client) QuerySync(_a0 types.RequestQuery) (*types.ResponseQuery, error
 	return r0, r1
 }
 
+
 // Quit provides a mock function with given fields:
 func (_m *Client) Quit() <-chan struct{} {
 	ret := _m.Called()

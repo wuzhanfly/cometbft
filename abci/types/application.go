@@ -29,6 +29,13 @@ type Application interface {
 	OfferSnapshot(RequestOfferSnapshot) ResponseOfferSnapshot                // Offer a snapshot to the application
 	LoadSnapshotChunk(RequestLoadSnapshotChunk) ResponseLoadSnapshotChunk    // Load a snapshot chunk
 	ApplySnapshotChunk(RequestApplySnapshotChunk) ResponseApplySnapshotChunk // Apply a shapshot chunk
+
+	// Fraud Proof Connection
+	GetAppHash(RequestGetAppHash) ResponseGetAppHash
+	// Generate Fraud Proof
+	GenerateFraudProof(RequestGenerateFraudProof) ResponseGenerateFraudProof
+	// Verifies a Fraud Proof
+	VerifyFraudProof(RequestVerifyFraudProof) ResponseVerifyFraudProof
 }
 
 //-------------------------------------------------------
@@ -93,6 +100,18 @@ func (BaseApplication) LoadSnapshotChunk(req RequestLoadSnapshotChunk) ResponseL
 
 func (BaseApplication) ApplySnapshotChunk(req RequestApplySnapshotChunk) ResponseApplySnapshotChunk {
 	return ResponseApplySnapshotChunk{}
+}
+
+func (BaseApplication) GetAppHash(req RequestGetAppHash) ResponseGetAppHash {
+	return ResponseGetAppHash{}
+}
+
+func (BaseApplication) GenerateFraudProof(req RequestGenerateFraudProof) ResponseGenerateFraudProof {
+	return ResponseGenerateFraudProof{}
+}
+
+func (BaseApplication) VerifyFraudProof(req RequestVerifyFraudProof) ResponseVerifyFraudProof {
+	return ResponseVerifyFraudProof{}
 }
 
 //-------------------------------------------------------
@@ -180,5 +199,23 @@ func (app *GRPCApplication) LoadSnapshotChunk(
 func (app *GRPCApplication) ApplySnapshotChunk(
 	ctx context.Context, req *RequestApplySnapshotChunk) (*ResponseApplySnapshotChunk, error) {
 	res := app.app.ApplySnapshotChunk(*req)
+	return &res, nil
+}
+
+func (app *GRPCApplication) GetAppHash(
+	ctx context.Context, req *RequestGetAppHash) (*ResponseGetAppHash, error) {
+	res := app.app.GetAppHash(*req)
+	return &res, nil
+}
+
+func (app *GRPCApplication) GenerateFraudProof(
+	ctx context.Context, req *RequestGenerateFraudProof) (*ResponseGenerateFraudProof, error) {
+	res := app.app.GenerateFraudProof(*req)
+	return &res, nil
+}
+
+func (app *GRPCApplication) VerifyFraudProof(
+	ctx context.Context, req *RequestVerifyFraudProof) (*ResponseVerifyFraudProof, error) {
+	res := app.app.VerifyFraudProof(*req)
 	return &res, nil
 }
