@@ -1,8 +1,11 @@
 package state
 
 import (
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"time"
 
 	abci "github.com/tendermint/tendermint/abci/types"
@@ -304,34 +307,121 @@ func execBlockOnProxyApp(
 		return nil, errors.New("nil header")
 	}
 
-	abciResponses.BeginBlock, err = proxyAppConn.BeginBlockSync(abci.RequestBeginBlock{
+	beginBlockReq := abci.RequestBeginBlock{
 		Hash:                block.Hash(),
 		Header:              *pbh,
 		LastCommitInfo:      commitInfo,
 		ByzantineValidators: byzVals,
-	})
+	}
+
+	apphash, err := proxyAppConn.GetAppHashSync(abci.RequestGetAppHash{})
+	if err != nil {
+		logger.Error("error in proxyAppConn.GetAppHashSync", "err", err)
+		return nil, err
+	}
+	logger.Info("appHash - prestate", "appHash", hex.EncodeToString(apphash.AppHash))
+
+	abciResponses.BeginBlock, err = proxyAppConn.BeginBlockSync(beginBlockReq)
 	if err != nil {
 		logger.Error("error in proxyAppConn.BeginBlock", "err", err)
 		return nil, err
 	}
 
+	apphash, err = proxyAppConn.GetAppHashSync(abci.RequestGetAppHash{})
+	if err != nil {
+		logger.Error("error in proxyAppConn.GetAppHashSync", "err", err)
+		return nil, err
+	}
+	logger.Info("appHash - beginblock", "appHash", hex.EncodeToString(apphash.AppHash))
+
 	// run txs of block
-	for _, tx := range block.Txs {
-		proxyAppConn.DeliverTxAsync(abci.RequestDeliverTx{Tx: tx})
+	// txsReq := []abci.RequestDeliverTx{Tx: nil}
+	txsReq := make([]*abci.RequestDeliverTx, len(block.Txs))
+	for i, tx := range block.Txs {
+		txReq := abci.RequestDeliverTx{Tx: tx}
+		txsReq[i] = &txReq
+		proxyAppConn.DeliverTxAsync(txReq)
 		if err := proxyAppConn.Error(); err != nil {
 			return nil, err
 		}
 	}
 
+	apphash, err = proxyAppConn.GetAppHashSync(abci.RequestGetAppHash{})
+	if err != nil {
+		logger.Error("error in proxyAppConn.GetAppHashSync", "err", err)
+		return nil, err
+	}
+	logger.Info("appHash - postTx", "appHash", hex.EncodeToString(apphash.AppHash))
+
 	// End block.
-	abciResponses.EndBlock, err = proxyAppConn.EndBlockSync(abci.RequestEndBlock{Height: block.Height})
+	endBlockReq := abci.RequestEndBlock{
+		Height: block.Height,
+	}
+	abciResponses.EndBlock, err = proxyAppConn.EndBlockSync(endBlockReq)
 	if err != nil {
 		logger.Error("error in proxyAppConn.EndBlock", "err", err)
 		return nil, err
 	}
 
+	apphash, err = proxyAppConn.GetAppHashSync(abci.RequestGetAppHash{})
+	if err != nil {
+		logger.Error("error in proxyAppConn.GetAppHashSync", "err", err)
+		return nil, err
+	}
+	logger.Info("appHash - endBlock", "appHash", hex.EncodeToString(apphash.AppHash))
+
+	if len(block.Data.Txs) > 0 && block.Height > 10 {
+		fraud, err := generateFraudProof(proxyAppConn, &beginBlockReq, txsReq, &endBlockReq)
+		if err != nil {
+			logger.Error("failed to generate fraud proof", "error", err)
+			return nil, err
+		}
+
+		if fraud == nil {
+			logger.Error("fraud proof is nil")
+			return nil, errors.New("fraud proof is nil")
+		}
+
+		// Open a new file for writing only
+		file, err := os.Create("fraudProof_hub_with_tx.json")
+		if err != nil {
+			return nil, err
+		}
+		defer file.Close()
+
+		// Serialize the struct to JSON and write it to the file
+		jsonEncoder := json.NewEncoder(file)
+		err = jsonEncoder.Encode(fraud)
+		if err != nil {
+			return nil, err
+		}
+
+		logger.Info("fraud proof generated")
+	}
+
 	logger.Info("executed block", "height", block.Height, "num_valid_txs", validTxs, "num_invalid_txs", invalidTxs)
 	return abciResponses, nil
+}
+
+func generateFraudProof(proxyAppConn proxy.AppConnConsensus, beginBlockRequest *abci.RequestBeginBlock, deliverTxRequests []*abci.RequestDeliverTx, endBlockRequest *abci.RequestEndBlock) (*abci.FraudProof, error) {
+	generateFraudProofRequest := abci.RequestGenerateFraudProof{}
+	if beginBlockRequest == nil || endBlockRequest == nil {
+		return nil, fmt.Errorf("begin/end block request cannot be a nil parameter")
+	}
+	generateFraudProofRequest.BeginBlockRequest = *beginBlockRequest
+	generateFraudProofRequest.EndBlockRequest = endBlockRequest
+	if deliverTxRequests != nil {
+		generateFraudProofRequest.DeliverTxRequests = deliverTxRequests
+	}
+
+	resp, err := proxyAppConn.GenerateFraudProofSync(generateFraudProofRequest)
+	if err != nil {
+		return nil, err
+	}
+	if resp.FraudProof == nil {
+		return nil, fmt.Errorf("fraud proof generation failed")
+	}
+	return resp.FraudProof, nil
 }
 
 func getBeginBlockValidatorInfo(block *types.Block, store Store,
