@@ -319,7 +319,7 @@ func execBlockOnProxyApp(
 		logger.Error("error in proxyAppConn.GetAppHashSync", "err", err)
 		return nil, err
 	}
-	logger.Info("appHash - prestate", "appHash", hex.EncodeToString(apphash.AppHash))
+	logger.Info("prestate", "comet AppHash", hex.EncodeToString(apphash.AppHash))
 
 	abciResponses.BeginBlock, err = proxyAppConn.BeginBlockSync(beginBlockReq)
 	if err != nil {
@@ -332,10 +332,9 @@ func execBlockOnProxyApp(
 		logger.Error("error in proxyAppConn.GetAppHashSync", "err", err)
 		return nil, err
 	}
-	logger.Info("appHash - beginblock", "appHash", hex.EncodeToString(apphash.AppHash))
+	logger.Info("after beginblock", "comet AppHash", hex.EncodeToString(apphash.AppHash))
 
 	// run txs of block
-	// txsReq := []abci.RequestDeliverTx{Tx: nil}
 	txsReq := make([]*abci.RequestDeliverTx, len(block.Txs))
 	for i, tx := range block.Txs {
 		txReq := abci.RequestDeliverTx{Tx: tx}
@@ -344,14 +343,15 @@ func execBlockOnProxyApp(
 		if err := proxyAppConn.Error(); err != nil {
 			return nil, err
 		}
-	}
 
-	apphash, err = proxyAppConn.GetAppHashSync(abci.RequestGetAppHash{})
-	if err != nil {
-		logger.Error("error in proxyAppConn.GetAppHashSync", "err", err)
-		return nil, err
+		apphash, err = proxyAppConn.GetAppHashSync(abci.RequestGetAppHash{})
+		if err != nil {
+			logger.Error("error in proxyAppConn.GetAppHashSync", "err", err)
+			return nil, err
+		}
+		logger.Info("after tx", "comet AppHash", hex.EncodeToString(apphash.AppHash))
+
 	}
-	logger.Info("appHash - postTx", "appHash", hex.EncodeToString(apphash.AppHash))
 
 	// End block.
 	endBlockReq := abci.RequestEndBlock{
@@ -368,9 +368,9 @@ func execBlockOnProxyApp(
 		logger.Error("error in proxyAppConn.GetAppHashSync", "err", err)
 		return nil, err
 	}
-	logger.Info("appHash - endBlock", "appHash", hex.EncodeToString(apphash.AppHash))
+	logger.Info("after endblock", "comet AppHash", hex.EncodeToString(apphash.AppHash))
 
-	if len(block.Data.Txs) > 0 && block.Height > 10 {
+	if len(block.Data.Txs) > 0 && block.Height > 5 {
 		fraud, err := generateFraudProof(proxyAppConn, &beginBlockReq, txsReq, &endBlockReq)
 		if err != nil {
 			logger.Error("failed to generate fraud proof", "error", err)
@@ -397,6 +397,7 @@ func execBlockOnProxyApp(
 		}
 
 		logger.Info("fraud proof generated")
+		// panic("fraud proof generated")
 	}
 
 	logger.Info("executed block", "height", block.Height, "num_valid_txs", validTxs, "num_invalid_txs", invalidTxs)
@@ -405,14 +406,17 @@ func execBlockOnProxyApp(
 
 func generateFraudProof(proxyAppConn proxy.AppConnConsensus, beginBlockRequest *abci.RequestBeginBlock, deliverTxRequests []*abci.RequestDeliverTx, endBlockRequest *abci.RequestEndBlock) (*abci.FraudProof, error) {
 	generateFraudProofRequest := abci.RequestGenerateFraudProof{}
-	if beginBlockRequest == nil || endBlockRequest == nil {
-		return nil, fmt.Errorf("begin/end block request cannot be a nil parameter")
+	if beginBlockRequest == nil {
+		return nil, fmt.Errorf("begin block request cannot be a nil parameter")
 	}
 	generateFraudProofRequest.BeginBlockRequest = *beginBlockRequest
-	generateFraudProofRequest.EndBlockRequest = endBlockRequest
 	if deliverTxRequests != nil {
 		generateFraudProofRequest.DeliverTxRequests = deliverTxRequests
+
 	}
+
+	//FIXME: HACK: always set fraudelent ST as the deliverTxRequest
+	// generateFraudProofRequest.EndBlockRequest = endBlockRequest
 
 	resp, err := proxyAppConn.GenerateFraudProofSync(generateFraudProofRequest)
 	if err != nil {
