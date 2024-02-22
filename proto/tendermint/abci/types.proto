@@ -472,6 +472,8 @@ message BlobInclusionProof {
   repeated bytes rproofs = 4;
   // Data root of the DA headers at the specific height
   bytes dataroot = 5;
+  //namespace
+  bytes namespace = 6;
 }
 
 message NonInclusionProof {
