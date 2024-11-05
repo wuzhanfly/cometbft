@@ -1283,6 +1283,19 @@ func (n *Node) EventBus() *types.EventBus {
 	return n.eventBus
 }
 
+func (n *Node) GetTxIndexer() *txindex.TxIndexer {
+	return &n.txIndexer
+}
+func (n *Node) GetBlockIndexer() *indexer.BlockIndexer {
+	return &n.blockIndexer
+}
+func (n *Node) GetIndexerService() *txindex.IndexerService {
+	return n.indexerService
+}
+func (n *Node) GetPrometheusSrv() *http.Server {
+	return n.prometheusSrv
+}
+
 // PrivValidator returns the Node's PrivValidator.
 // XXX: for convenience only!
 func (n *Node) PrivValidator() types.PrivValidator {
